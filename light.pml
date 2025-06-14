@@ -1,205 +1,212 @@
-bool BLUE_REQ = false;   
-bool RED_REQ = false;
-bool ORANGE_REQ = false;
-bool PURPLE_REQ = false;
-bool PED_REQ = false;
-bool BLACK_REQ = false;
+#define BLUE_NS_ROAD_ID 1
+#define RED_NE_ROAD_ID 2
+#define ORANGE_SN_ROAD_ID 3
+#define PURPLE_WN_ROAD_ID 4
+#define BLACK_EW_ROAD_ID 5
+#define PED_ROAD_ID 6
 
-bool BLUE_SENSE = false;  
-bool RED_SENSE = false;
-bool ORANGE_SENSE = false;
-bool PURPLE_SENSE = false;
-bool PED_SENSE = false; 
-bool BLACK_SENSE = false;
+chan BLUE_LIGHT_CHANNEL = [1] of {byte};
+chan RED_LIGHT_CHANNEL = [1] of {byte};
+chan ORANGE_LIGHT_CHANNEL = [1] of {byte};
+chan PURPLE_LIGHT_CHANNEL = [1] of {byte};
+chan BLACK_LIGHT_CHANNEL = [1] of {byte};
+chan PED_LIGHT_CHANNEL = [1] of {byte};
 
-bool BLUE_LIGHT = false;  
-bool RED_LIGHT = false;
-bool ORANGE_LIGHT = false;
-bool PURPLE_LIGHT = false;
-bool PED_LIGHT = false; 
-bool BLACK_LIGHT = false;
+byte priority_coef = 10;
 
-// ЛОКИ
-bool BLUE_LOCK = false;
-bool RED_LOCK = false;
-bool ORANGE_LOCK = false;
-bool PURPLE_LOCK = false;
-bool PED_LOCK = false;
-bool BLACK_LOCK = false;
 
-byte TURN = 0; // 0: BLUE, 1: RED, 2: ORANGE, 3: PURPLE, 4: BLACK, 5: PED
+short n_requests_per_road [7] = {0,0,0,0,0,0,0};
+bool road_sensor_state[7] = {false, false, false, false, false, false, false};
+bool traffic_lights_states [7] = {false, false, false, false, false, false, false};
 
-proctype gen_blue() {
+
+byte current_processed_road_id = 1;
+
+
+proctype CarTrafficGenerator(){
     do
-    :: !BLUE_REQ && !BLUE_SENSE ->
-        BLUE_SENSE = true;
-        BLUE_REQ = true;
+        :: BLUE_LIGHT_CHANNEL!1
+        :: RED_LIGHT_CHANNEL!1
+        :: ORANGE_LIGHT_CHANNEL!1
+        :: PURPLE_LIGHT_CHANNEL!1
+        :: BLACK_LIGHT_CHANNEL!1
     od
 }
 
-proctype gen_red() {
+proctype PedTrafficGenerator(){
     do
-    :: !RED_REQ && !RED_SENSE ->
-        RED_SENSE = true;
-        RED_REQ = true;
+        :: PED_LIGHT_CHANNEL!1
     od
 }
 
-proctype gen_orange() {
+proctype TrafficLight (byte curr_road_id; byte next_road_id; byte competitor_1; byte competitor_2; byte competitor_3; byte competitor_4; chan traffic_channel){
+    short curr_road_value = 0;
+    short competitor_1_value = 0;
+    short competitor_2_value = 0;
+    short competitor_3_value = 0;
+    short competitor_4_value = 0;
+    byte channel_data = 0;
     do
-    :: !ORANGE_REQ && !ORANGE_SENSE ->
-        ORANGE_SENSE = true;
-        ORANGE_REQ = true;
+        :: current_processed_road_id == curr_road_id ->
+        if
+        :: traffic_channel?channel_data->
+                n_requests_per_road[0] = 0; 
+                road_sensor_state[curr_road_id] = (channel_data == 1);
+
+                atomic {
+                    printf("\n\n\nProcess for road id: %d", curr_road_id);
+                    printf("\nN of n_requests_per_road: %d", n_requests_per_road[curr_road_id]);
+                    printf("\nCar sensor state: %d", road_sensor_state[curr_road_id]);
+                    printf("\nTraffic Light opened: %d", traffic_lights_states[curr_road_id]);
+                }
+
+                if
+                    :: traffic_lights_states[curr_road_id] == true ->
+                        n_requests_per_road[curr_road_id] = 0; 
+                        traffic_lights_states[curr_road_id] = false;
+                        printf ("\n\n\nClose traffic light for road_id: %d", curr_road_id);
+                        printf("\nN n_requests_per_road for this road_id: %d", n_requests_per_road[curr_road_id]);
+                    :: else -> skip;
+                fi;
+                
+                if
+                :: n_requests_per_road[curr_road_id] > 0 ->
+                        printf("\n\n\nAvailable n_requests_per_road for road_id: %d", curr_road_id)
+                        if
+                        :: (n_requests_per_road[competitor_1] == 0) && 
+                            (n_requests_per_road[competitor_2] == 0) && 
+                            (n_requests_per_road[competitor_3] == 0) &&
+                            (n_requests_per_road[competitor_4] == 0)
+                            ->
+                                printf("\n\n\nOpen traffic light for road_id: %d", curr_road_id);
+                                traffic_lights_states[curr_road_id] = true;
+                                road_sensor_state[curr_road_id] = false;
+                                current_processed_road_id = next_road_id
+                        :: else ->
+                                printf("\n\n\nFailed to open traffic light for road_id: %d", curr_road_id);
+                                if
+                                    :: n_requests_per_road[competitor_1] > 0 -> competitor_1_value = n_requests_per_road[competitor_1];
+                                    :: else -> competitor_1_value = 0;
+                                fi;
+                                if
+                                    :: n_requests_per_road[competitor_2] >0 -> competitor_2_value = n_requests_per_road[competitor_2];
+                                    :: else -> competitor_2_value = 0;
+                                fi;
+                                if
+                                    :: n_requests_per_road[competitor_3] >0 -> competitor_3_value = n_requests_per_road[competitor_3];
+                                    :: else -> competitor_3_value = 0;
+                                fi
+                                if
+                                    :: n_requests_per_road[competitor_4] >0 -> competitor_4_value = n_requests_per_road[competitor_4];
+                                    :: else -> competitor_4_value = 0;
+                                fi
+
+                                curr_road_value = n_requests_per_road[curr_road_id];
+                                
+                                atomic {
+                                    printf("\n\n\n --- N n_requests_per_road status (BEFORE CHECK) --- ")
+            
+                                    printf("\n\nN n_requests_per_road for curr road_id %d: %d \nN n_requests_per_road for competitor_1 road_id %d: %d \nN n_requests_per_road for competitor_2 road_id %d: %d \nN n_requests_per_road for competitor_3 road_id %d: %d \nN n_requests_per_road for competitor_4 road_id %d: %d", curr_road_id, curr_road_value, competitor_1, competitor_1_value, competitor_2, competitor_2_value, competitor_3, competitor_3_value, competitor_4, competitor_4_value);
+                                }
+
+                                if 
+                                    :: competitor_1_value > curr_road_value || competitor_2_value > curr_road_value || competitor_3_value > curr_road_value ->
+                                        n_requests_per_road[curr_road_id] = curr_road_value + priority_coef; 
+                                        n_requests_per_road[competitor_1] = competitor_1_value + priority_coef;
+                                        n_requests_per_road[competitor_2] = competitor_2_value + priority_coef;
+                                        n_requests_per_road[competitor_3] = competitor_3_value + priority_coef;
+                                        n_requests_per_road[competitor_4] = competitor_4_value + priority_coef;
+                                        
+                                        printf("\n\n\n --- N n_requests_per_road status (AFTER CHECK, FAILED TO OPEN TRAFFIC LIGHT) --- ")
+                                        printf("\n\nN n_requests_per_road for curr road_id %d: %d \nN n_requests_per_road for competitor_1 road_id %d: %d \nN n_requests_per_road for competitor_2 road_id %d: %d \nN n_requests_per_road for competitor_3 road_id %d: %d \nN n_requests_per_road for competitor_4 road_id %d: %d", curr_road_id, n_requests_per_road[curr_road_id], competitor_1, n_requests_per_road[competitor_1], competitor_2, n_requests_per_road[competitor_2], competitor_3, n_requests_per_road[competitor_3], competitor_4, n_requests_per_road[competitor_4]);
+                                        skip
+                                    :: else ->
+                                        printf("\n\n\n --- N n_requests_per_road status (AFTER CHECK, SUCCEEDED TO OPEN TRAFFIC LIGHT) --- ")
+                                        printf("\n\nN n_requests_per_road for curr road_id %d: %d \nN n_requests_per_road for competitor_1 road_id %d: %d \nN n_requests_per_road for competitor_2 road_id %d: %d \nN n_requests_per_road for competitor_3 road_id %d: %d \nN n_requests_per_road for competitor_4 road_id %d: %d", curr_road_id, n_requests_per_road[curr_road_id], competitor_1, n_requests_per_road[competitor_1], competitor_2, n_requests_per_road[competitor_2], competitor_3, n_requests_per_road[competitor_3], competitor_4, n_requests_per_road[competitor_4]);
+                                        traffic_lights_states[curr_road_id] = true;
+                                        road_sensor_state[curr_road_id] = false;
+                                        n_requests_per_road[curr_road_id] = 999 + curr_road_id
+                                fi;
+                        
+                        current_processed_road_id = next_road_id;
+                        n_requests_per_road[0] = 0;
+                        fi
+                :: else ->
+                        printf("\n\n\nNo n_requests_per_road for road_id: %d", curr_road_id)
+                        n_requests_per_road[curr_road_id] = curr_road_id;
+                        current_processed_road_id = next_road_id;
+                fi;
+            fi;
     od
 }
 
-proctype gen_purple() {
-    do
-    :: !PURPLE_REQ && !PURPLE_SENSE ->
-        PURPLE_SENSE = true;
-        PURPLE_REQ = true;
-    od
-}
-
-proctype gen_black() {
-    do
-    :: !BLACK_REQ && !BLACK_SENSE ->
-        BLACK_SENSE = true;
-        BLACK_REQ = true;
-    od
-}
-
-proctype gen_ped() {
-    do
-    :: !PED_REQ && !PED_SENSE ->
-        PED_SENSE = true;
-        PED_REQ = true;
-    od
-}
-
-proctype arbiter() {
-    do
-    :: timeout -> TURN = (TURN + 1) % 6
-    od
-}
-
-// --- Контроллеры ---
-
-proctype ctrl_blue() {
-    do
-    :: TURN == 0 && BLUE_REQ && !ORANGE_LOCK && !PED_LOCK ->
-        BLUE_LOCK = true;
-        BLUE_LIGHT = true;
-        do
-        :: BLUE_SENSE -> BLUE_SENSE = false
-        :: else -> break
-        od;
-        BLUE_LIGHT = false;
-        BLUE_REQ = false;
-        BLUE_LOCK = false;
-    od
-}
-
-proctype ctrl_red() {
-    do
-    :: TURN == 1 && RED_REQ && !ORANGE_LOCK && !PURPLE_LOCK && !PED_LOCK && !BLACK_LOCK ->
-        RED_LOCK = true;
-        RED_LIGHT = true;
-        do
-        :: RED_SENSE -> RED_SENSE = false
-        :: else -> break
-        od;
-        RED_LIGHT = false;
-        RED_REQ = false;
-        RED_LOCK = false;
-    od
-}
-
-proctype ctrl_orange() {
-    do
-    :: TURN == 2 && ORANGE_REQ && !BLUE_LOCK && !RED_LOCK && !PURPLE_LOCK && !PED_LOCK && !BLACK_LOCK ->
-        ORANGE_LOCK = true;
-        ORANGE_LIGHT = true;
-        do
-        :: ORANGE_SENSE -> ORANGE_SENSE = false
-        :: else -> break
-        od;
-        ORANGE_LIGHT = false;
-        ORANGE_REQ = false;
-        ORANGE_LOCK = false;
-    od
-}
-
-proctype ctrl_purple() {
-    do
-    :: TURN == 3 && PURPLE_REQ && !RED_LOCK && !ORANGE_LOCK && !PED_LOCK && !BLACK_LOCK ->
-        PURPLE_LOCK = true;
-        PURPLE_LIGHT = true;
-        do
-        :: PURPLE_SENSE -> PURPLE_SENSE = false
-        :: else -> break
-        od;
-        PURPLE_LIGHT = false;
-        PURPLE_REQ = false;
-        PURPLE_LOCK = false;
-    od
-}
-
-proctype ctrl_black() {
-    do
-    :: TURN == 4 && BLACK_REQ && !RED_LOCK && !ORANGE_LOCK && !PURPLE_LOCK && !PED_LOCK ->
-        BLACK_LOCK = true;
-        BLACK_LIGHT = true;
-        do
-        :: BLACK_SENSE -> BLACK_SENSE = false
-        :: else -> break
-        od;
-        BLACK_LIGHT = false;
-        BLACK_REQ = false;
-        BLACK_LOCK = false;
-    od
-}
-
-proctype ctrl_ped() {
-    do
-    :: TURN == 5 && PED_REQ && !RED_LOCK && !ORANGE_LOCK && !PURPLE_LOCK && !BLACK_LOCK && !BLUE_LOCK ->
-        PED_LOCK = true;
-        PED_LIGHT = true;
-        do
-        :: PED_SENSE -> PED_SENSE = false
-        :: else -> break
-        od;
-        PED_LIGHT = false;
-        PED_REQ = false;
-        PED_LOCK = false;
-    od
-}
 
 init {
-    run arbiter();
-    run gen_blue();   run ctrl_blue();
-    run gen_red();    run ctrl_red();
-    run gen_orange(); run ctrl_orange();
-    run gen_purple(); run ctrl_purple();
-    run gen_black();  run ctrl_black();
-    run gen_ped();    run ctrl_ped();
+    run TrafficLight(BLUE_NS_ROAD_ID, RED_NE_ROAD_ID, PURPLE_WN_ROAD_ID, BLACK_EW_ROAD_ID, 0, 0, BLUE_NS_ROAD_ID);
+    run TrafficLight(RED_NE_ROAD_ID, ORANGE_SN_ROAD_ID, ORANGE_SN_ROAD_ID, PURPLE_WN_ROAD_ID, PED_ROAD_ID, BLACK_EW_ROAD_ID, RED_LIGHT_CHANNEL);
+    run TrafficLight(ORANGE_SN_ROAD_ID, PURPLE_WN_ROAD_ID, RED_NE_ROAD_ID, BLACK_EW_ROAD_ID, 0, 0, ORANGE_LIGHT_CHANNEL);
+    run TrafficLight(PURPLE_WN_ROAD_ID, BLACK_EW_ROAD_ID, BLUE_NS_ROAD_ID, RED_NE_ROAD_ID, BLACK_EW_ROAD_ID, 0, PURPLE_LIGHT_CHANNEL);
+    run TrafficLight(BLACK_EW_ROAD_ID, PED_ROAD_ID, RED_NE_ROAD_ID, ORANGE_SN_ROAD_ID, PURPLE_WN_ROAD_ID, BLUE_NS_ROAD_ID, BLACK_LIGHT_CHANNEL);
+    run TrafficLight(PED_ROAD_ID, BLUE_NS_ROAD_ID, RED_NE_ROAD_ID, BLACK_EW_ROAD_ID, 0, 0, PED_LIGHT_CHANNEL);
+
+    run CarTrafficGenerator();
+    run PedTrafficGenerator();
 }
 
-// SAFETY
-ltl saf1 { []( !(RED_LIGHT && PED_LIGHT) ) }
-ltl saf2 { []( !(BLUE_LIGHT && PED_LIGHT) ) }
-ltl saf3 { []( !(ORANGE_LIGHT && PED_LIGHT) ) }
-ltl saf4 { []( !(ORANGE_LIGHT && BLUE_LIGHT) ) }
-ltl saf5 { []( !(BLACK_LIGHT && PED_LIGHT) ) }
-ltl saf6 { []( !(BLACK_LIGHT && ORANGE_LIGHT) ) }
-ltl saf7 { []( !(PURPLE_LIGHT && BLACK_LIGHT) ) }
-ltl saf8 { []( !(PURPLE_LIGHT && PED_LIGHT) ) }
+// Safety
+ltl safety_1 { [] (!(traffic_lights_states[BLUE_NS_ROAD_ID] == 1 && traffic_lights_states[PURPLE_WN_ROAD_ID] == 1)) }  // Нет пересечений между Blue and Purple
+ltl safety_2 { [] (!(traffic_lights_states[BLUE_NS_ROAD_ID] == 1 && traffic_lights_states[BLACK_EW_ROAD_ID] == 1)) } // Нет пересечений между Blue and Black
+ltl safety_3 { [] (!(traffic_lights_states[RED_NE_ROAD_ID] == 1 && traffic_lights_states[ORANGE_SN_ROAD_ID] == 1)) }  // Нет пересечений между Red and Orange
+ltl safety_4 { [] (!(traffic_lights_states[RED_NE_ROAD_ID] == 1 && traffic_lights_states[PURPLE_WN_ROAD_ID] == 1)) } // Нет пересечений между Red and Purple
+ltl safety_5 { [] (!(traffic_lights_states[RED_NE_ROAD_ID] == 1 && traffic_lights_states[PED_ROAD_ID] == 1)) } // Нет пересечений между Red and PED
+ltl safety_6 { [] (!(traffic_lights_states[RED_NE_ROAD_ID] == 1 && traffic_lights_states[BLACK_EW_ROAD_ID] == 1)) } // Нет пересечений между Red and Black
+ltl safety_7 { [] (!(traffic_lights_states[ORANGE_SN_ROAD_ID] == 1 && traffic_lights_states[BLACK_EW_ROAD_ID] == 1)) } // Нет пересечений между Orange and Black
+ltl safety_8 { [] (!(traffic_lights_states[PURPLE_WN_ROAD_ID] == 1 && traffic_lights_states[BLACK_EW_ROAD_ID] == 1)) } // Нет пересечений между Purple and Black
+ltl safety_9 { [] (!(traffic_lights_states[PED_ROAD_ID] == 1 && traffic_lights_states[BLACK_EW_ROAD_ID] == 1)) } // Нет пересечений между PED and Black
 
-// LIVENESS
-ltl live1 { []( RED_REQ && !RED_LIGHT -> <> RED_LIGHT ) }
-ltl live2 { []( ORANGE_REQ && !ORANGE_LIGHT -> <> ORANGE_LIGHT ) }
-ltl live3 { []( BLACK_REQ && !BLACK_LIGHT -> <> BLACK_LIGHT ) }
-ltl live4 { []( PURPLE_REQ && !PURPLE_LIGHT -> <> PURPLE_LIGHT ) }
+ltl safety_all {
+  [] (!(traffic_lights_states[BLUE_NS_ROAD_ID] == 1 && traffic_lights_states[PURPLE_WN_ROAD_ID] == 1)) &&
+  [] (!(traffic_lights_states[BLUE_NS_ROAD_ID] == 1 && traffic_lights_states[BLACK_EW_ROAD_ID] == 1)) &&
+  [] (!(traffic_lights_states[RED_NE_ROAD_ID] == 1 && traffic_lights_states[ORANGE_SN_ROAD_ID] == 1)) &&
+  [] (!(traffic_lights_states[RED_NE_ROAD_ID] == 1 && traffic_lights_states[PURPLE_WN_ROAD_ID] == 1)) &&
+  [] (!(traffic_lights_states[RED_NE_ROAD_ID] == 1 && traffic_lights_states[PED_ROAD_ID] == 1)) &&
+  [] (!(traffic_lights_states[RED_NE_ROAD_ID] == 1 && traffic_lights_states[BLACK_EW_ROAD_ID] == 1)) &&
+  [] (!(traffic_lights_states[ORANGE_SN_ROAD_ID] == 1 && traffic_lights_states[BLACK_EW_ROAD_ID] == 1)) &&
+  [] (!(traffic_lights_states[PURPLE_WN_ROAD_ID] == 1 && traffic_lights_states[BLACK_EW_ROAD_ID] == 1)) &&
+  [] (!(traffic_lights_states[PED_ROAD_ID] == 1 && traffic_lights_states[BLACK_EW_ROAD_ID] == 1))
+}
 
-// FAIRNESS
-ltl fair1 { []<>( !(RED_LIGHT && RED_REQ) ) }
+
+// Liveness
+ltl liveness_1 { [](road_sensor_state[BLUE_NS_ROAD_ID] && traffic_lights_states[BLUE_NS_ROAD_ID] == 0) -> <> (traffic_lights_states[BLUE_NS_ROAD_ID] == 1) }  // Для BLUE_NS дороги
+ltl liveness_2 { [](road_sensor_state[RED_NE_ROAD_ID] && traffic_lights_states[RED_NE_ROAD_ID] == 0) -> <> (traffic_lights_states[RED_NE_ROAD_ID] == 1) }  // Для RED_NE дороги
+ltl liveness_3 { [](road_sensor_state[ORANGE_SN_ROAD_ID] && traffic_lights_states[ORANGE_SN_ROAD_ID] == 0) -> <> (traffic_lights_states[ORANGE_SN_ROAD_ID] == 1) } // Для ORANGE_SN дороги
+ltl liveness_4 { [](road_sensor_state[PURPLE_WN_ROAD_ID] && traffic_lights_states[PURPLE_WN_ROAD_ID] == 0) -> <> (traffic_lights_states[PURPLE_WN_ROAD_ID] == 1) } // Для PURPLE_WN дороги
+ltl liveness_5 { [](road_sensor_state[BLACK_EW_ROAD_ID] && traffic_lights_states[BLACK_EW_ROAD_ID] == 0) -> <> (traffic_lights_states[BLACK_EW_ROAD_ID] == 1) } // Для BLACK_EW дороги
+ltl liveness_6 { [](road_sensor_state[PED_ROAD_ID] && traffic_lights_states[PED_ROAD_ID] == 0) -> <> (traffic_lights_states[PED_ROAD_ID] == 1) } // Для PED пешеходника
+
+ltl liveness_all {
+  [] (!((road_sensor_state[BLUE_NS_ROAD_ID] && traffic_lights_states[BLUE_NS_ROAD_ID] == 0) || <> (traffic_lights_states[BLUE_NS_ROAD_ID] == 1)) &&
+      (!((road_sensor_state[RED_NE_ROAD_ID] && traffic_lights_states[RED_NE_ROAD_ID] == 0)) || <> (traffic_lights_states[RED_NE_ROAD_ID]==1)) &&
+      (!((road_sensor_state[ORANGE_SN_ROAD_ID] && traffic_lights_states[ORANGE_SN_ROAD_ID] == 0)) || <> (traffic_lights_states[ORANGE_SN_ROAD_ID]==1)) &&
+      (!((road_sensor_state[PURPLE_WN_ROAD_ID] && traffic_lights_states[PURPLE_WN_ROAD_ID] == 0)) || <> (traffic_lights_states[PURPLE_WN_ROAD_ID]==1)) &&
+      (!((road_sensor_state[BLACK_EW_ROAD_ID] && traffic_lights_states[BLACK_EW_ROAD_ID] == 0)) || <> (traffic_lights_states[BLACK_EW_ROAD_ID]==1)) &&
+      (!((road_sensor_state[PED_ROAD_ID] && traffic_lights_states[PED_ROAD_ID] == 0)) || <> (traffic_lights_states[PED_ROAD_ID]==1)))
+}
+
+// Fairness
+ltl fairness_1 { [] (<> (traffic_lights_states[BLUE_NS_ROAD_ID] == 0)) }  // Для BLUE_NS дороги
+ltl fairness_2 { [] (<> (traffic_lights_states[RED_NE_ROAD_ID] == 0)) }  // Для RED_NE дороги
+ltl fairness_3 { [] (<> (traffic_lights_states[ORANGE_SN_ROAD_ID] == 0)) }  // Для ORANGE_SN дороги
+ltl fairness_4 { [] (<> (traffic_lights_states[PURPLE_WN_ROAD_ID] == 0)) }  // Для PURPLE_WN дороги
+ltl fairness_5 { [] (<> (traffic_lights_states[BLACK_EW_ROAD_ID] == 0)) }  // Для BLACK_EW дороги
+ltl fairness_6 { [] (<> (traffic_lights_states[PED_ROAD_ID] == 0)) }  // Для PED пешеходника
+
+ltl fairness_all {
+  [] (<> (traffic_lights_states[BLUE_NS_ROAD_ID]==0) &&
+      <> (traffic_lights_states[RED_NE_ROAD_ID]==0) &&
+      <> (traffic_lights_states[ORANGE_SN_ROAD_ID]==0) &&
+      <> (traffic_lights_states[PURPLE_WN_ROAD_ID]==0) &&
+      <> (traffic_lights_states[BLACK_EW_ROAD_ID]==0) &&
+      <> (traffic_lights_states[PED_ROAD_ID]==0))
+}
