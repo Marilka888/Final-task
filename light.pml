@@ -186,7 +186,7 @@ ltl liveness_5 { [](road_sensor_state[BLACK_EW_ROAD_ID] && traffic_lights_states
 ltl liveness_6 { [](road_sensor_state[PED_ROAD_ID] && traffic_lights_states[PED_ROAD_ID] == 0) -> <> (traffic_lights_states[PED_ROAD_ID] == 1) } // Для PED пешеходника
 
 ltl liveness_all {
-  [] (!((road_sensor_state[BLUE_NS_ROAD_ID] && traffic_lights_states[BLUE_NS_ROAD_ID] == 0) || <> (traffic_lights_states[BLUE_NS_ROAD_ID] == 1)) &&
+  [] ((!((road_sensor_state[BLUE_NS_ROAD_ID] && traffic_lights_states[BLUE_NS_ROAD_ID] == 0)) || <> (traffic_lights_states[BLUE_NS_ROAD_ID] == 1)) &&
       (!((road_sensor_state[RED_NE_ROAD_ID] && traffic_lights_states[RED_NE_ROAD_ID] == 0)) || <> (traffic_lights_states[RED_NE_ROAD_ID]==1)) &&
       (!((road_sensor_state[ORANGE_SN_ROAD_ID] && traffic_lights_states[ORANGE_SN_ROAD_ID] == 0)) || <> (traffic_lights_states[ORANGE_SN_ROAD_ID]==1)) &&
       (!((road_sensor_state[PURPLE_WN_ROAD_ID] && traffic_lights_states[PURPLE_WN_ROAD_ID] == 0)) || <> (traffic_lights_states[PURPLE_WN_ROAD_ID]==1)) &&

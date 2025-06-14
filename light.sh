@@ -43,7 +43,7 @@ do
   echo -e "Выполнение проверки: ${ltl}..."
 
   # Запуск проверки модели Spin
-  ./spin -search -m1000000 -ltl $ltl light.pml light.pml > "${RESULT_DIR}/${ltl}.txt"
+  ./spin -search -m1000000 -ltl $ltl light.pml > "${RESULT_DIR}/${ltl}.txt"
 
   # Проверка успешности выполнения команды Spin
   if [ $? -eq 0 ]; then
